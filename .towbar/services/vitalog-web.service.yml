@@ -4,8 +4,7 @@ name: Vitalog UI
 description: HeroUI daily and weight views, API keys and MCP authorization
 deployment:
   type: image
-  # Candidate tag: replace with the verified v1.0.3 digest before rollout.
-  image: ghcr.io/avgeek-oss/vitalog-web:v1.0.3
+  image: ghcr.io/avgeek-oss/vitalog-web@sha256:a4b41e89241157c78cd93e1a8b8cc244e4916c4db93a26fee608bc187d1ad582
   platform: linux/arm64
 autoDeploy: false
 rollout:
