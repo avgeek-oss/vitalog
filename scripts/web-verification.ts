@@ -1047,6 +1047,36 @@ try {
         });
         assert.equal(registration.status, 201);
         const clientId = String(registration.data.client_id);
+        async function signInToConsent(testInvalid = false) {
+          await page
+            .getByRole("heading", { name: "Sign in", exact: true })
+            .waitFor();
+          await page
+            .getByLabel("Email", { exact: true })
+            .fill(credentials.email);
+          if (testInvalid) {
+            await page
+              .getByLabel("Password", { exact: true })
+              .fill("incorrect-password");
+            await page
+              .getByRole("button", { name: "Sign in", exact: true })
+              .click();
+            await page
+              .getByText("Email or password is incorrect", { exact: true })
+              .waitFor();
+            assert.equal(
+              await page.getByLabel("Password", { exact: true }).inputValue(),
+              "",
+            );
+          }
+          await page
+            .getByLabel("Password", { exact: true })
+            .fill(credentials.password);
+          await page
+            .getByRole("button", { name: "Sign in", exact: true })
+            .click();
+          await page.getByLabel("Application", { exact: true }).waitFor();
+        }
         for (const action of ["allow", "deny"] as const) {
           const verifier = randomBytes(32).toString("base64url");
           const state = randomBytes(32).toString("base64url");
@@ -1062,64 +1092,51 @@ try {
           });
           await page.goto(apiUrl + "/oauth/authorize?" + parameters);
           await page.waitForURL(uiUrl + "/oauth/authorize");
+          await signInToConsent(action === "allow");
           await page
-            .getByRole("heading", {
-              name: "Connect Example MCP client",
-              exact: true,
-            })
+            .getByRole("heading", { name: "Connect to Vitalog", exact: true })
             .waitFor();
+          const applicationInput = page.getByLabel("Application", {
+            exact: true,
+          });
+          assert.equal(
+            await applicationInput.inputValue(),
+            "Example MCP client",
+          );
+          assert(await applicationInput.isDisabled());
           await page
             .getByText(
-              "Allow Example MCP client to read your health ledger for 30 days.",
+              "Allow MCP connection to Vitalog. Review the application and the scope to continue.",
               { exact: true },
             )
             .waitFor();
-          const positions = await page.evaluate(() => {
-            const cancel = Array.from(document.querySelectorAll("button")).find(
-              (button) => button.textContent === "Cancel",
-            )!;
-            const returnTo = Array.from(document.querySelectorAll("p")).find(
-              (paragraph) => paragraph.textContent?.startsWith("Return to "),
-            )!;
-            return {
-              cancel: cancel.getBoundingClientRect().bottom,
-              returnTo: returnTo.getBoundingClientRect().top,
-            };
-          });
-          assert(positions.returnTo > positions.cancel);
+          const denyPosition = await page
+            .getByRole("button", { name: "Deny", exact: true })
+            .boundingBox();
+          const backPosition = await page
+            .getByRole("button", {
+              name: "Back to Example MCP client",
+              exact: true,
+            })
+            .boundingBox();
+          assert(
+            denyPosition &&
+              backPosition &&
+              backPosition.y > denyPosition.y + denyPosition.height,
+          );
           if (action === "allow") {
+            await page.getByRole("button", { name: "Select Scope" }).click();
             await page
-              .getByLabel("Email", { exact: true })
-              .fill(credentials.email);
-            await page
-              .getByLabel("Password", { exact: true })
-              .fill("incorrect-password");
-            await page
-              .getByRole("button", {
-                name: "Connect Example MCP client",
-                exact: true,
-              })
+              .getByRole("option", { name: "Administrator", exact: true })
               .click();
             await page
-              .getByText("Invalid credentials", { exact: true })
-              .waitFor();
-            assert.equal(
-              await page.getByLabel("Password", { exact: true }).inputValue(),
-              "",
-            );
-            await page
-              .getByLabel("Password", { exact: true })
-              .fill(credentials.password);
-            await page
-              .getByRole("button", {
-                name: "Connect Example MCP client",
-                exact: true,
-              })
+              .getByRole("button", { name: "Approve", exact: true })
               .click();
-          } else
+          } else {
             await page
-              .getByRole("button", { name: "Cancel", exact: true })
+              .getByRole("button", { name: "Deny", exact: true })
               .click();
+          }
           await page.waitForURL(callback + "?*");
           const returned = new URL(page.url()).searchParams;
           assert.equal(returned.get("state"), state);
@@ -1141,13 +1158,16 @@ try {
               },
             );
             assert.equal(exchange.status(), 200);
-            const token = (await exchange.json()).access_token as string;
+            const exchanged = await exchange.json();
+            assert.equal(exchanged.scope, "health:read health:write");
+            const token = exchanged.access_token as string;
             const key = (
               await connection!.pool.query(
-                "select id from api_keys where token_digest=$1",
+                "select id,oauth_access_level from api_keys where token_digest=$1",
                 [createHash("sha256").update(token).digest("hex")],
               )
             ).rows[0];
+            assert.equal(key.oauth_access_level, "admin");
             assert.equal(
               (await api("/v1/api-keys/" + key.id, primary, "DELETE")).status,
               200,
@@ -1176,25 +1196,36 @@ try {
         });
         await page.setViewportSize({ width: 320, height: 844 });
         await page.goto(apiUrl + "/oauth/authorize?" + parameters);
+        await signInToConsent();
         await page
-          .getByRole("heading", { name: "Connect " + longName, exact: true })
+          .getByRole("heading", { name: "Connect to Vitalog", exact: true })
           .waitFor();
         assert(
           !(await page.evaluate(
             () => document.documentElement.scrollWidth > innerWidth,
           )),
-          "Registered client names must wrap on mobile",
+          "Registered client names must not overflow on mobile",
         );
-        await page.getByRole("button", { name: "Cancel", exact: true }).click();
+        assert.equal(
+          await page.getByLabel("Application", { exact: true }).inputValue(),
+          longName,
+        );
+        await page
+          .getByRole("button", { name: "Back to " + longName, exact: true })
+          .click();
         await page.waitForURL(callback + "?*");
         await page.setViewportSize({ width: 1280, height: 1000 });
         await page.goto(uiUrl + "/oauth/authorize");
-        await page.getByText("Connection expired", { exact: true }).waitFor();
+        await page
+          .getByText("Connection expired. Restart from your MCP client.", {
+            exact: true,
+          })
+          .waitFor();
         assert.equal(
           await page
-            .getByRole("button", { name: "Connect to Vitalog", exact: true })
-            .isDisabled(),
-          true,
+            .getByRole("button", { name: "Approve", exact: true })
+            .count(),
+          0,
         );
       },
     );
@@ -1289,7 +1320,7 @@ try {
               assert.equal(await password.inputValue(), "incorrect-password");
               releaseResponse();
               await signInPage
-                .getByText("Invalid credentials", { exact: true })
+                .getByText("Email or password is incorrect", { exact: true })
                 .waitFor();
               await signInPage.waitForFunction(
                 () =>
@@ -1419,7 +1450,9 @@ try {
         await page
           .getByRole("button", { name: "Sign in", exact: true })
           .click();
-        await page.getByText("Invalid credentials", { exact: true }).waitFor();
+        await page
+          .getByText("Email or password is incorrect", { exact: true })
+          .waitFor();
         assert.equal(
           await page.getByLabel("Password", { exact: true }).inputValue(),
           "",
@@ -2217,7 +2250,9 @@ try {
         await verification
           .getByRole("button", { name: "Continue", exact: true })
           .click();
-        await page.getByText("Invalid credentials", { exact: true }).waitFor();
+        await page
+          .getByText("Email or password is incorrect", { exact: true })
+          .waitFor();
         assert.equal(
           await verification
             .getByLabel("Password", { exact: true })
