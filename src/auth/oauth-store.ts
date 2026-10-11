@@ -13,6 +13,7 @@ export type OAuthGrant = {
   redirect_uri: string;
   resource: string;
   scopes: string[];
+  accessLevel?: "read" | "write" | "admin";
   code_challenge: string;
 };
 export type CodeExchange = {
@@ -75,6 +76,9 @@ export class OAuthStore {
       apiKeyId,
       clientId: grant.client_id,
       clientName: grant.client_name,
+      accessLevel:
+        grant.accessLevel ??
+        (grant.scopes.includes("health:write") ? "write" : "read"),
       redirectUri: grant.redirect_uri,
       resource: grant.resource,
       scopes: grant.scopes,
@@ -92,6 +96,7 @@ export class OAuthStore {
           apiKeyId: oauthCodes.apiKeyId,
           scopes: oauthCodes.scopes,
           clientName: oauthCodes.clientName,
+          accessLevel: oauthCodes.accessLevel,
         })
         .from(oauthCodes)
         .where(
@@ -146,6 +151,7 @@ export class OAuthStore {
               oauthClientId: input.client_id,
               oauthClientName: grant.clientName,
               oauthScopes: grant.scopes,
+              oauthAccessLevel: grant.accessLevel,
               expiresAt: sql`statement_timestamp() + interval '720 hours'`,
             })
             .returning(projection);

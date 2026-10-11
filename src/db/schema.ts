@@ -270,6 +270,9 @@ export const apiKeys = pgTable(
     oauthClientId: text("oauth_client_id"),
     oauthClientName: text("oauth_client_name"),
     oauthScopes: text("oauth_scopes").array(),
+    oauthAccessLevel: text("oauth_access_level", {
+      enum: ["read", "write", "admin"],
+    }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .default(sql`statement_timestamp()`),
@@ -299,6 +302,7 @@ export const oauthCodes = pgTable(
       onDelete: "cascade",
     }),
     clientName: text("client_name"),
+    accessLevel: text("access_level", { enum: ["read", "write", "admin"] }),
     clientId: text("client_id").notNull(),
     redirectUri: text("redirect_uri").notNull(),
     resource: text("resource").notNull(),

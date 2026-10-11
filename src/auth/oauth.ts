@@ -42,6 +42,7 @@ const flowSchema = z.strictObject({
   state: z.string().max(512).optional(),
   csrf_token: encodedSecret,
   expires_at: z.number().int(),
+  authenticated: z.boolean().optional(),
 });
 type Flow = z.infer<typeof flowSchema>;
 export const exchangeSchema = z.object({
@@ -55,11 +56,23 @@ export const exchangeSchema = z.object({
   resource: z.string().max(512),
   code_verifier: z.string().regex(/^[A-Za-z0-9._~-]{43,128}$/),
 });
-export const approvalSchema = z.discriminatedUnion("action", [
+const selectedAccess = z.enum(["read", "write", "admin"]);
+export const approvalSchema = z.union([
+  z.strictObject({
+    csrf_token: encodedSecret,
+    action: z.literal("authenticate"),
+    ...credentialsSchema.shape,
+  }),
   z.strictObject({
     csrf_token: encodedSecret,
     action: z.literal("allow"),
+    accessLevel: selectedAccess,
     ...credentialsSchema.shape,
+  }),
+  z.strictObject({
+    csrf_token: encodedSecret,
+    action: z.literal("allow"),
+    accessLevel: selectedAccess,
   }),
   z.strictObject({ csrf_token: encodedSecret, action: z.literal("deny") }),
 ]);
@@ -303,11 +316,6 @@ export function oauthRoutes(
       if (canonicalResource(input.resource) !== resource)
         throw new OAuthError("invalid_target", "Use this MCP resource");
       scopes = parseScopes(input.scope ?? client.scope);
-      if (scopes.some((scope) => !parseScopes(client!.scope).includes(scope)))
-        throw new OAuthError(
-          "invalid_scope",
-          "The client is not registered for these scopes",
-        );
     } catch (error) {
       deleteCookie(c, cookieName, cookieOptions);
       if (!(error instanceof OAuthError) || !client || !callback) throw error;
@@ -346,6 +354,8 @@ export function oauthRoutes(
       redirect_uri: flow.redirect_uri,
       scopes: flow.scopes,
       csrf_token: flow.csrf_token,
+      authenticated: flow.authenticated === true,
+      availableAccessLevels: ["read", "write", "admin"],
     });
   });
   routes.post("/oauth/approve", async (c) => {
@@ -378,6 +388,15 @@ export function oauthRoutes(
         "invalid_request",
         "Restart the connection from your MCP client",
       );
+    if (approval.data.action === "authenticate") {
+      config.assertCredentialAbsent(approval.data.email);
+      await root.verify(approval.data.email, approval.data.password);
+      setCookie(c, cookieName, encode({ ...flow, authenticated: true }), {
+        ...cookieOptions,
+        maxAge: Math.max(1, Math.floor((flow.expires_at - Date.now()) / 1000)),
+      });
+      return c.json({ authenticated: true });
+    }
     const redirect = new URL(flow.redirect_uri);
     if (flow.state !== undefined)
       redirect.searchParams.set("state", flow.state);
@@ -385,10 +404,25 @@ export function oauthRoutes(
     if (approval.data.action === "deny")
       redirect.searchParams.set("error", "access_denied");
     else {
-      config.assertCredentialAbsent(approval.data.email);
-      await root.verify(approval.data.email, approval.data.password);
+      if ("email" in approval.data) {
+        config.assertCredentialAbsent(approval.data.email);
+        await root.verify(approval.data.email, approval.data.password);
+      } else if (!flow.authenticated)
+        throw new OAuthError(
+          "login_required",
+          "Sign in before approving access.",
+          401,
+        );
+      const accessLevel = approval.data.accessLevel;
+      const scopes =
+        accessLevel === "read"
+          ? ["health:read"]
+          : ["health:read", "health:write"];
       await clients.approve(flow.client_id);
-      redirect.searchParams.set("code", await store.issueCode(undefined, flow));
+      redirect.searchParams.set(
+        "code",
+        await store.issueCode(undefined, { ...flow, scopes, accessLevel }),
+      );
     }
     deleteCookie(c, cookieName, cookieOptions);
     return c.json({ redirect_to: redirect.toString() });
