@@ -64,7 +64,7 @@
     "esbuild": "0.28.2"
   },
   "devDependencies": {
-    "@avgeek-oss/design-system": "file:vendor/avgeek-oss-design-system-1.2.15.tgz",
+    "@avgeek-oss/design-system": "file:vendor/avgeek-oss-design-system-1.2.16.tgz",
     "@avgeek-oss/docs": "github:avgeek-oss/oss-docs#3b16b472e03563b1a15df33a5ada2c5fba81bb87",
     "@types/node": "24.10.13",
     "@types/pg": "8.16.0",

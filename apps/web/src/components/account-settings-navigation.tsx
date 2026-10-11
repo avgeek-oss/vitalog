@@ -1,8 +1,7 @@
 "use client";
 
 import { SecondaryItems } from "@avgeek-oss/design-system/navigation/secondary-sidebar";
-import Link01Icon from "@hugeicons/core-free-icons/Link01Icon";
-import BookOpen01Icon from "@hugeicons/core-free-icons/BookOpen01Icon";
+import McpServerIcon from "@hugeicons/core-free-icons/McpServerIcon";
 import UserAccountIcon from "@hugeicons/core-free-icons/UserAccountIcon";
 import Key01Icon from "@hugeicons/core-free-icons/Key01Icon";
 import Settings01Icon from "@hugeicons/core-free-icons/Settings01Icon";
@@ -45,13 +44,13 @@ export function AccountSettingsNavigation() {
             id: "mcp-connections",
             href: "/settings/mcp-connections",
             label: "MCP Connections",
-            icon: <HugeiconsIcon icon={Link01Icon} size={16} />,
+            icon: <HugeiconsIcon icon={McpServerIcon} size={16} />,
           },
           {
             id: "mcp",
             href: "/settings/mcp",
             label: "MCP Guide",
-            icon: <HugeiconsIcon icon={BookOpen01Icon} size={16} />,
+            icon: <HugeiconsIcon icon={McpServerIcon} size={16} />,
           },
         ]}
       />
