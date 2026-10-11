@@ -43,12 +43,28 @@ export async function authorizeMcpFixture(
     authorization.headers.get("location"),
     uiOrigin + "/oauth/authorize",
   );
-  const cookie = authorization.headers.get("set-cookie")!.split(";")[0]!;
+  let cookie = authorization.headers.get("set-cookie")!.split(";")[0]!;
   const context = await fetch(issuer + "/oauth/request", {
     headers: { Cookie: cookie },
   });
   assert.equal(context.status, 200);
   const request = await context.json();
+  const signIn = await fetch(issuer + "/oauth/approve", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Origin: uiOrigin,
+      Cookie: cookie,
+    },
+    body: JSON.stringify({
+      csrf_token: request.csrf_token,
+      action: "authenticate",
+      ...credentials,
+    }),
+  });
+  assert.equal(signIn.status, 200);
+  assert.equal((await signIn.json()).authenticated, true);
+  cookie = signIn.headers.get("set-cookie")!.split(";")[0]!;
   const approval = await fetch(issuer + "/oauth/approve", {
     method: "POST",
     headers: {
@@ -59,7 +75,7 @@ export async function authorizeMcpFixture(
     body: JSON.stringify({
       csrf_token: request.csrf_token,
       action: "allow",
-      ...credentials,
+      accessLevel: "write",
     }),
   });
   assert.equal(approval.status, 200);
