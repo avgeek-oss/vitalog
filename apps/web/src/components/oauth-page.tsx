@@ -127,7 +127,7 @@ export function OAuthPage({ apiBaseUrl }: { apiBaseUrl: string }) {
       clientLogo={
         <McpClientLogo
           client={
-            connection.client_id.startsWith("https://chatgpt.com/")
+            connection.client_id.startsWith("https://chatgpt.com/oauth/codex/")
               ? "codex"
               : "unknown"
           }
