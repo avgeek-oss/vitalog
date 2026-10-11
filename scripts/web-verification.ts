@@ -1037,6 +1037,7 @@ try {
     await check(
       "Shared MCP consent shows the registered client and completes PKCE approval and cancellation",
       async () => {
+        await startApi();
         const callback = apiUrl + "/oauth-browser-callback";
         const registration = await api("/oauth/register", undefined, "POST", {
           client_name: "Example MCP client",
@@ -1320,7 +1321,7 @@ try {
               assert.equal(await password.inputValue(), "incorrect-password");
               releaseResponse();
               await signInPage
-                .getByText("Email or password is incorrect", { exact: true })
+                .getByText("Invalid credentials", { exact: true })
                 .waitFor();
               await signInPage.waitForFunction(
                 () =>
@@ -1450,9 +1451,7 @@ try {
         await page
           .getByRole("button", { name: "Sign in", exact: true })
           .click();
-        await page
-          .getByText("Email or password is incorrect", { exact: true })
-          .waitFor();
+        await page.getByText("Invalid credentials", { exact: true }).waitFor();
         assert.equal(
           await page.getByLabel("Password", { exact: true }).inputValue(),
           "",
@@ -2250,9 +2249,7 @@ try {
         await verification
           .getByRole("button", { name: "Continue", exact: true })
           .click();
-        await page
-          .getByText("Email or password is incorrect", { exact: true })
-          .waitFor();
+        await page.getByText("Invalid credentials", { exact: true }).waitFor();
         assert.equal(
           await verification
             .getByLabel("Password", { exact: true })
