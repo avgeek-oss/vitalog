@@ -179,6 +179,13 @@ async function approve(
     body: JSON.stringify({
       csrf_token: flow.csrf,
       action,
+      ...(action === "allow"
+        ? {
+            accessLevel: flow.params.get("scope")?.includes("health:write")
+              ? "write"
+              : "read",
+          }
+        : {}),
       ...(action === "allow" ? credentials : {}),
     }),
     ...extra,
@@ -814,6 +821,90 @@ try {
           );
       } finally {
         await instance.close();
+      }
+    },
+  );
+  await check(
+    "Shared sign-in authenticates consent separately and user choice overrides the client request",
+    async () => {
+      for (const [requested, selected, expected] of [
+        ["health:read health:write", "read", "health:read"],
+        ["health:read", "write", "health:read health:write"],
+        ["health:read", "admin", "health:read health:write"],
+      ] as const) {
+        restart();
+        const flow = await begin(requested);
+        const post = (cookie: string, body: object) =>
+          json("/oauth/approve", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Origin: uiOrigin,
+              Cookie: cookie,
+            },
+            body: JSON.stringify({ csrf_token: flow.csrf, ...body }),
+          });
+        assert.equal(
+          (await post(flow.cookie, { action: "allow", accessLevel: selected }))
+            .response.status,
+          401,
+        );
+        const signedIn = await post(flow.cookie, {
+          action: "authenticate",
+          ...login,
+        });
+        assert.equal(signedIn.response.status, 200);
+        assert.equal(signedIn.body.authenticated, true);
+        assert.equal(signedIn.body.redirect_to, undefined);
+        const cookie = signedIn.response.headers
+          .get("set-cookie")!
+          .split(";")[0]!;
+        assert.equal(
+          (await json("/oauth/request", { headers: { Cookie: cookie } })).body
+            .authenticated,
+          true,
+        );
+        assert.equal(
+          (await post(cookie, { action: "allow" })).response.status,
+          400,
+        );
+        const approved = await post(cookie, {
+          action: "allow",
+          accessLevel: selected,
+        });
+        assert.equal(approved.response.status, 200);
+        const code = new URL(
+          String(approved.body.redirect_to),
+        ).searchParams.get("code")!;
+        const issued = await exchange({ ...flow, code });
+        assert.equal(issued.response.status, 200);
+        assert.equal(issued.body.scope, expected);
+        const accessToken = String(issued.body.access_token);
+        tokens.push(accessToken);
+        const key = await connectionKey(accessToken);
+        const policy = await connection!.pool.query(
+          "select oauth_access_level from api_keys where id=$1",
+          [key.id],
+        );
+        assert.equal(policy.rows[0].oauth_access_level, selected);
+        const store = new OAuthStore(connection!.db, origin + "/mcp");
+        assert(await store.authenticate("Bearer " + accessToken));
+        await connection!.pool.query(
+          "update api_keys set oauth_access_level=$2 where id=$1",
+          [key.id, selected === "read" ? "write" : "read"],
+        );
+        assert.equal(
+          await store.authenticate("Bearer " + accessToken),
+          undefined,
+        );
+        await connection!.pool.query(
+          "update api_keys set oauth_access_level=$2 where id=$1",
+          [key.id, selected],
+        );
+        assert.equal(
+          await store.authenticate("Bearer " + accessToken),
+          undefined,
+        );
       }
     },
   );
@@ -1579,11 +1670,11 @@ try {
       tokens.push(String(issued.body.access_token));
       const params = new URLSearchParams(grant.params);
       params.set("scope", "health:write");
-      const denied = await request("/oauth/authorize?" + params);
-      assert.equal(denied.status, 302);
+      const requested = await request("/oauth/authorize?" + params);
+      assert.equal(requested.status, 302);
       assert.equal(
-        new URL(denied.headers.get("location")!).searchParams.get("error"),
-        "invalid_scope",
+        new URL(requested.headers.get("location")!).origin,
+        uiOrigin,
       );
       assert.equal((await request("/healthz?secret=" + secret)).status, 422);
       assert(

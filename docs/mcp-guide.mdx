@@ -9,7 +9,7 @@ Open **Account Settings → MCP Guide** in Vitalog to copy configurations for yo
 
 ## Connect with OAuth
 
-Add the MCP URL to a client that supports Streamable HTTP and MCP authorization. The client discovers the authorization server, registers or supplies its client metadata, and opens Vitalog's consent page. Sign in with the root email and password, review the requesting client's identity, callback destination and requested access, then approve.
+Add the MCP URL to a client that supports Streamable HTTP and MCP authorization. The client discovers the authorization server, registers or supplies its client metadata, and opens Vitalog's consent page. Sign in with the root email and password, then choose **Read-only**, **Write**, or **Administrator** in the shared consent form and approve. The form starts with Read-only; client-requested scopes do not dictate your choice. Vitalog has one configured operator and no team membership roles. Write and Administrator currently permit the same health-data MCP operations; REST and account administration remain unavailable to MCP. Changing a connection's saved access level revokes it and requires a fresh authorization.
 
 The client receives its token through the OAuth callback and token exchange. You do not need to create or paste an API key. Tokens expire after 30 days; reconnect after expiry. Revoke a connection from **Account Settings → MCP Connections** after verifying your root credentials.
 

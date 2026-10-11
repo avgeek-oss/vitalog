@@ -1,24 +1,35 @@
 "use client";
-
-import { toast } from "@avgeek-oss/design-system/overlays/toast";
-import { AuthScreen } from "@avgeek-oss/design-system/patterns/auth/auth-screen";
-import { useEffect, useState } from "react";
+import {
+  McpAuthorization,
+  SignIn,
+  type McpAccessLevel,
+} from "@avgeek-oss/design-system";
+import { useEffect, useRef, useState } from "react";
 import { authorizationCallback } from "../lib/oauth";
 import { Brand } from "./brand";
-import { CredentialsForm, type Credentials } from "./credentials-form";
-import { Button } from "./ui/button";
+import { McpClientLogo } from "./mcp-client-logo";
+import { AuthScreen } from "@avgeek-oss/design-system/patterns/auth/auth-screen";
+import {
+  QueryLoading,
+  QueryError,
+} from "@avgeek-oss/design-system/patterns/feedback/query-state";
 
 type ConnectionRequest = {
   client_id: string;
   client_name: string;
   redirect_uri: string;
-  scopes: string[];
   csrf_token: string;
+  authenticated: boolean;
+  availableAccessLevels: McpAccessLevel[];
 };
 
 export function OAuthPage({ apiBaseUrl }: { apiBaseUrl: string }) {
   const [connection, setConnection] = useState<ConnectionRequest>();
+  const [loadError, setLoadError] = useState<string>();
+  const [error, setError] = useState<string>();
+  const [accessLevel, setAccessLevel] = useState<McpAccessLevel>("read");
   const [pending, setPending] = useState(false);
+  const inFlight = useRef(false);
   useEffect(() => {
     const controller = new AbortController();
     async function load() {
@@ -29,63 +40,51 @@ export function OAuthPage({ apiBaseUrl }: { apiBaseUrl: string }) {
           redirect: "error",
           signal: controller.signal,
         });
-        if (!response.ok) throw new Error("Invalid connection");
+        if (!response.ok)
+          throw new Error("Connection expired. Restart from your MCP client.");
         setConnection(await response.json());
-      } catch {
+      } catch (cause) {
         if (!controller.signal.aborted)
-          toast.danger("Connection expired", {
-            description: "Restart the connection from your MCP client.",
-            timeout: 0,
-          });
+          setLoadError(
+            cause instanceof Error
+              ? cause.message
+              : "Unable to load this connection.",
+          );
       }
     }
     void load();
     return () => controller.abort();
   }, [apiBaseUrl]);
-  const title = connection
-    ? `Connect ${connection.client_name}`
-    : "Connect to Vitalog";
-  useEffect(() => {
-    document.title = `${title} · Vitalog`;
-  }, [title]);
-  const callback = connection ? new URL(connection.redirect_uri) : undefined;
-  let clientHost: string | undefined;
-  try {
-    if (connection?.client_id.startsWith("https://"))
-      clientHost = new URL(connection.client_id).host;
-  } catch {}
-
-  async function approve(action: "allow" | "deny", credentials?: Credentials) {
-    if (!connection || pending) return;
+  async function post(body: object) {
+    if (!connection)
+      throw new Error("Restart the connection from your MCP client.");
+    const response = await fetch(apiBaseUrl + "/oauth/approve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ csrf_token: connection.csrf_token, ...body }),
+      cache: "no-store",
+      credentials: "include",
+      redirect: "error",
+    });
+    if (!response.ok) {
+      const failure = await response.json();
+      throw new Error(
+        failure.error_description ??
+          failure.message ??
+          "Unable to connect. Try again.",
+      );
+    }
+    return response;
+  }
+  async function decide(action: "allow" | "deny") {
+    if (!connection || inFlight.current) return;
+    inFlight.current = true;
     setPending(true);
+    setError(undefined);
     try {
-      const response = await fetch(apiBaseUrl + "/oauth/approve", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          csrf_token: connection.csrf_token,
-          action,
-          ...(action === "allow" ? credentials : {}),
-        }),
-        cache: "no-store",
-        credentials: "include",
-        redirect: "error",
-      }).catch(() => {
-        throw new Error(
-          "Unable to connect. Check your connection and try again.",
-        );
-      });
-      if (!response.ok)
-        throw new Error(
-          response.status === 401
-            ? "Invalid credentials"
-            : response.status === 429
-              ? "Too many attempts. Wait a minute and try again."
-              : response.status === 503
-                ? "Sign-in is unavailable. Check the root configuration."
-                : "The connection could not be completed. Restart from your MCP client.",
-        );
-      const result: { redirect_to: string } = await response.json();
+      const result: { redirect_to: string } = await (
+        await post(action === "allow" ? { action, accessLevel } : { action })
+      ).json();
       window.location.assign(
         authorizationCallback(
           apiBaseUrl,
@@ -94,66 +93,53 @@ export function OAuthPage({ apiBaseUrl }: { apiBaseUrl: string }) {
           action,
         ),
       );
-    } finally {
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Unable to connect. Try again.",
+      );
+      inFlight.current = false;
       setPending(false);
     }
   }
-  const permission =
-    connection?.scopes.includes("health:read") &&
-    connection.scopes.includes("health:write")
-      ? "read and update"
-      : connection?.scopes.includes("health:write")
-        ? "update"
-        : "read";
-  return (
-    <main className="vitalog-auth">
-      <AuthScreen
-        brand={<Brand />}
-        title={title}
-        description={
-          connection
-            ? `Allow ${connection.client_name} to ${permission} your health ledger for 30 days.`
-            : undefined
-        }
-      >
-        {clientHost ? (
-          <p className="text-center text-sm text-muted break-words">
-            Application: {clientHost}
-          </p>
-        ) : null}
-        <CredentialsForm
-          isDisabled={!connection || pending}
-          submitLabel={title}
-          busyLabel="Connecting…"
-          submitButtonClassName="h-auto min-h-11 whitespace-normal wrap-anywhere py-3"
-          onSubmit={(credentials) => approve("allow", credentials)}
-        />
-        <div className="key-actions">
-          <Button
-            variant="secondary"
-            fullWidth
-            isDisabled={!connection || pending}
-            onPress={async () => {
-              try {
-                await approve("deny");
-              } catch (cause) {
-                toast.danger(
-                  cause instanceof Error
-                    ? cause.message
-                    : "Unable to connect. Try again.",
-                );
-              }
-            }}
-          >
-            Cancel
-          </Button>
-          {callback ? (
-            <p className="text-center text-sm text-accent break-words underline underline-offset-4">
-              Return to {callback.host || connection?.redirect_uri}
-            </p>
-          ) : null}
-        </div>
+  if (!connection)
+    return (
+      <AuthScreen brand={<Brand />} title="Connect to Vitalog">
+        {loadError ? <QueryError message={loadError} /> : <QueryLoading />}
       </AuthScreen>
-    </main>
+    );
+  if (!connection.authenticated)
+    return (
+      <SignIn
+        brand={<Brand />}
+        onSubmit={async ({ identifier, password }) => {
+          await post({ action: "authenticate", email: identifier, password });
+          setConnection({ ...connection, authenticated: true });
+        }}
+      />
+    );
+  return (
+    <McpAuthorization
+      brand={<Brand />}
+      productName="Vitalog"
+      clientName={connection.client_name}
+      clientLogo={
+        <McpClientLogo
+          client={
+            connection.client_id.startsWith("https://chatgpt.com/oauth/codex/")
+              ? "codex"
+              : "unknown"
+          }
+        />
+      }
+      accessLevel={accessLevel}
+      availableAccessLevels={connection.availableAccessLevels}
+      onAccessLevelChange={setAccessLevel}
+      isPending={pending}
+      error={error}
+      onApprove={() => void decide("allow")}
+      onDeny={() => void decide("deny")}
+    />
   );
 }
