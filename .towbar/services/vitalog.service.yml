@@ -4,7 +4,7 @@ name: Vitalog API
 description: Personal health ledger REST API and MCP service
 deployment:
   type: image
-  image: ghcr.io/avgeek-oss/vitalog-api@sha256:654302d35cc922472c3ef0b736a5bde869ce6422c870acf22f80f58ced8a6832
+  image: ghcr.io/avgeek-oss/vitalog-api:v1.0.3@sha256:654302d35cc922472c3ef0b736a5bde869ce6422c870acf22f80f58ced8a6832
   platform: linux/arm64
 autoDeploy: false
 rollout:
