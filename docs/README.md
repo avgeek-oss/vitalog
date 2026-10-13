@@ -12,7 +12,7 @@ npm run docs:dev
 
 The preview runs at http://localhost:4175. The Mint CLI is pinned in package scripts; it is not part of either production image.
 
-Edit `site.json` for branding and navigation. The pinned `@avgeek-oss/docs` package generates `docs.json`, `oss-docs.css`, `oss-docs.js` and `snippets/oss/`; commit these generated outputs and never hand-edit them.
+Edit `site.json` for branding and navigation. The pinned `@avgeek-oss/mintlify-docs` package generates `docs.json`, `oss-docs.css`, `oss-docs.js` and `snippets/oss/`; commit these generated outputs and never hand-edit them.
 
 Edit `index.mdx`, `concepts.mdx`, `logging.mdx`, `contributing.mdx`, `quickstart.mdx`, `mcp-guide.mdx`, `installation.mdx`, `configuration.mdx`, `operations.mdx` and `troubleshooting.mdx` directly. The generator creates the dashboard, record, goal, API-key, OAuth and Towbar guides from their source documents in `docs/`, along with `mcp-tools.mdx`, `openapi.json` and brand assets. `npm run docs:check` detects stale output. Run `npm run docs:generate` and commit both the source and generated files after a contract change.
 

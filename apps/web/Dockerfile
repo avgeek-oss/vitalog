@@ -1,9 +1,8 @@
 FROM node:24.16.0-bookworm-slim AS build
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json .npmrc ./
 COPY apps/web/package.json ./apps/web/package.json
-COPY vendor ./vendor
 RUN npm ci
 COPY apps/web ./apps/web
 COPY src/auth/account-contracts.ts ./src/auth/account-contracts.ts

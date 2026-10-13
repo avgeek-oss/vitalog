@@ -1,4 +1,4 @@
-Vitalog uses generated homepage components, styles and header tooling from @avgeek-oss/docs, Copyright Avgeek, Inc., under Apache License 2.0. See LICENSE in this directory and the shared package's LICENSE and NOTICE. Product content, navigation and screenshots belong to this repository.
+Vitalog uses generated homepage components, styles and header tooling from @avgeek-oss/mintlify-docs, Copyright Avgeek, Inc., under Apache License 2.0. See LICENSE in this directory and the shared package's LICENSE and NOTICE. Product content, navigation and screenshots belong to this repository.
 
 https://github.com/avgeek-oss/oss-docs
 
