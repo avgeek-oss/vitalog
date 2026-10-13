@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.4 (2026-10-13)
+
+- Install shared UI and Mintlify documentation packages from public npm without GitHub package credentials.
+- Use the shared API-key and MCP connection tables on desktop and mobile, with consistent client names and icons.
+- Keep API, UI and plugin versions aligned; manifest image tags are candidates until this version is published.
+
 ## Unreleased
 
 - Deploy the API and web app through Towbar using published release images pinned by digest, without source builds on the production server.
